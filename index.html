@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1301,7 +1300,8 @@ function GmatApp() {
             {view === "analytics" && <AnalyticsView results={myResults} />}
             {view === "review" && <ReviewView results={myResults} tests={MOCK_TESTS} />}
             {view === "admin" && currentUser.role === "admin" && <AdminView users={users} allResults={allResults} tests={MOCK_TESTS} setUsers={setUsers} showNotif={showNotif} setView={setView} setActiveTest={setActiveTest} />}
-            {!["dashboard","test","analytics","review","admin"].includes(view) && (
+            {view === "notes" && <VerbalNotesView />}
+            {!["dashboard","test","analytics","review","admin","notes"].includes(view) && (
               <>{currentUser.role === "admin" ? setView("admin") : setView("dashboard")}</>
             )}
           </div>
@@ -1536,6 +1536,7 @@ function Navbar({ currentUser, view, setView, onLogout }) {
         <span className={`nav-link ${view === "dashboard" ? "active" : ""}`} onClick={() => setView("dashboard")}>Tests</span>
         <span className={`nav-link ${view === "analytics" ? "active" : ""}`} onClick={() => setView("analytics")}>Analytics</span>
         <span className={`nav-link ${view === "review" ? "active" : ""}`} onClick={() => setView("review")}>Review</span>
+        <span className={`nav-link ${view === "notes" ? "active" : ""}`} onClick={() => setView("notes")} style={{ color: view === "notes" ? "#2563eb" : "#7c3aed" }}>📝 Notes</span>
         {currentUser.role === "admin" && (
           <span className={`nav-link ${view === "admin" ? "active" : ""}`} onClick={() => setView("admin")}>Admin Panel</span>
         )}
@@ -2584,6 +2585,364 @@ function AdminView({ users, allResults, tests, setUsers, showNotif, setView, set
     </div>
   );
 }
+// ─── Verbal Notes Data ────────────────────────────────────────────────────────
+const VERBAL_NOTES = {
+  "Critical Reasoning": {
+    icon: "🧠",
+    color: "#2563eb",
+    accent: "#dbeafe",
+    topics: [
+      {
+        title: "Argument Structure",
+        tag: "Foundation",
+        tagColor: "#16a34a",
+        tagBg: "#dcfce7",
+        summary: "Every CR argument has a Conclusion (the claim being made), Premises (evidence/facts supporting it), and often an Assumption (the unstated bridge). Identifying these is your first step on any CR question.",
+        points: [
+          { label: "Conclusion", text: "The main claim the author is trying to prove. Signal words: therefore, thus, hence, so, consequently, clearly, this shows." },
+          { label: "Premise", text: "Facts or evidence offered to support the conclusion. Signal words: because, since, given that, as shown by, studies indicate." },
+          { label: "Assumption", text: "An unstated fact the argument depends on. If the assumption is false, the argument collapses. Always ask: 'What must also be true for the conclusion to hold?'" },
+          { label: "Counter-premise", text: "An objection or opposing fact introduced before the conclusion. Often preceded by 'although', 'however', 'despite'. The conclusion follows DESPITE this counter-premise." },
+        ],
+        tip: "On hard questions, wrong answers often confuse premise with conclusion. Always locate the conclusion before reading answer choices."
+      },
+      {
+        title: "Assumption Questions",
+        tag: "High-Yield",
+        tagColor: "#d97706",
+        tagBg: "#fef3c7",
+        summary: "The argument assumes something is true without stating it. Your job: find the unstated belief the author is relying on. Use the Negation Test — negate the answer; if the argument falls apart, it's the assumption.",
+        points: [
+          { label: "Negation Test", text: "Negate each answer choice. If negating it destroys or seriously weakens the conclusion, that's the assumption. This is the most reliable technique." },
+          { label: "Gap Bridging", text: "Identify the logical gap between the premise and conclusion. The assumption fills that gap. Common gap: the author treats two different groups/situations as equivalent." },
+          { label: "Scope shift", text: "Look for new terms or concepts in the conclusion that weren't in the premises — the assumption often connects them." },
+          { label: "Common traps", text: "Answers that are true in real life but irrelevant to the specific gap in the argument. Assumptions must be required, not just helpful." },
+        ],
+        tip: "Assumptions are NECESSARY — not merely possible. An answer that 'could' help is not sufficient. It must be something the argument cannot survive without."
+      },
+      {
+        title: "Strengthen Questions",
+        tag: "Common",
+        tagColor: "#2563eb",
+        tagBg: "#dbeafe",
+        summary: "Find the answer that makes the conclusion more likely to be true. It doesn't need to prove the conclusion — just shift the probability in its favour. Always begin by identifying the assumption.",
+        points: [
+          { label: "Strategy", text: "Identify the assumption → look for an answer that confirms or supports that assumption. The best strengthener typically validates a key assumed link." },
+          { label: "Survey/Study results", text: "New data that confirms the trend or result claimed by the conclusion directly strengthens. Ensure the population or context matches." },
+          { label: "Rule out alternatives", text: "Eliminating a competing explanation for the conclusion's premise also strengthens by showing the author's cause is the real one." },
+          { label: "Common traps", text: "Answers that strengthen a premise already stated (doesn't help — premise is given as fact). Answers that are only tangentially related to the conclusion." },
+        ],
+        tip: "A 'perfect' strengthener directly supports the assumption. Think: 'If this were true, the conclusion becomes more convincing.'"
+      },
+      {
+        title: "Weaken Questions",
+        tag: "Common",
+        tagColor: "#dc2626",
+        tagBg: "#fee2e2",
+        summary: "Find the answer that makes the conclusion less likely to be true. Target the assumption — an answer that breaks or undermines the assumption is the best weakener.",
+        points: [
+          { label: "Attack the assumption", text: "Show that the assumed link doesn't hold. If the argument assumes X → Y, show that X doesn't lead to Y in this case." },
+          { label: "Alternative explanation", text: "Provide another cause for the observed effect, breaking the causal link the author is claiming." },
+          { label: "Reverse causality", text: "Show that the causal direction is opposite to what's claimed (B caused A, not A caused B)." },
+          { label: "Scope mismatch", text: "Show that a sample/study doesn't represent the conclusion's broader population, undermining the generalization." },
+          { label: "Common traps", text: "Answers that weaken a premise (premises are given as true — weakening them is irrelevant). Answers that are true but attack a different part of the argument." },
+        ],
+        tip: "GMAT weakeners don't need to disprove the conclusion — they only need to reduce its likelihood. A single counterexample or alternative cause is sufficient."
+      },
+      {
+        title: "Inference / Must Be True",
+        tag: "Tricky",
+        tagColor: "#7c3aed",
+        tagBg: "#ede9fe",
+        summary: "These questions ask what MUST be true based solely on the statements given. The correct answer follows necessarily and directly. No outside knowledge. No assumptions.",
+        points: [
+          { label: "Scope discipline", text: "Correct answers stay within the scope of what's stated. Anything that goes even slightly beyond the given facts is likely wrong." },
+          { label: "Conditional logic", text: "If the passage says 'All A are B', you can infer 'No non-B is A'. Contrapositive is always valid." },
+          { label: "Quantifier matching", text: "Distinguish 'some', 'most', 'all', 'none'. Don't over-extend: 'Some A are B' does NOT mean 'Most A are B'." },
+          { label: "Most Supported", text: "A variant asking for the answer best supported by the passage. Still requires strong grounding in given facts — avoid speculation." },
+        ],
+        tip: "The word 'must' is key. If an answer is only 'probably' or 'possibly' true, eliminate it. If you can imagine a case where it's false given the information, it's wrong."
+      },
+      {
+        title: "Evaluate / Boldface Questions",
+        tag: "Advanced",
+        tagColor: "#0891b2",
+        tagBg: "#cffafe",
+        summary: "Evaluate questions ask what information would help determine whether the argument is valid. Boldface asks you to identify the roles two highlighted portions play in the argument.",
+        points: [
+          { label: "Evaluate strategy", text: "Think of the argument's assumption and ask: 'What fact would tell us if the assumption is correct or incorrect?' Often framed as a question (e.g., 'Which question would most help evaluate...?')." },
+          { label: "Yes/No technique", text: "For Evaluate, a good answer works two ways: if YES → strengthens; if NO → weakens (or vice versa). Answers that only help in one direction are weaker candidates." },
+          { label: "Boldface roles", text: "Common roles: main conclusion, subsidiary conclusion, premise, background, counter-premise, evidence for the counter-position, evidence against." },
+          { label: "Boldface strategy", text: "Identify whether each boldfaced portion supports or opposes the conclusion. Then match to answer choices. Be precise — 'evidence for' vs 'conclusion' vs 'assumption' are all different." },
+        ],
+        tip: "Boldface wrong answers often mislabel the role (e.g., call a premise a conclusion). Use the signal words in each boldfaced sentence to determine its direction."
+      },
+      {
+        title: "Paradox / Explain Questions",
+        tag: "Common",
+        tagColor: "#059669",
+        tagBg: "#d1fae5",
+        summary: "The passage presents a surprising result or apparent contradiction. You must find the answer that explains how BOTH facts in the paradox can simultaneously be true.",
+        points: [
+          { label: "Identify both facts", text: "Explicitly state both sides of the paradox: 'Fact 1 says X; Fact 2 says the opposite of X. How?' Then look for an answer that reconciles them." },
+          { label: "Answer must explain both", text: "The correct answer doesn't just explain one fact — it must show how both facts are consistent. If it only addresses one side, eliminate it." },
+          { label: "Common paradox types", text: "Treatment is effective but people still get the disease; Company cuts costs but profits fall; Study shows benefit but outcome worsens." },
+          { label: "Common traps", text: "Answers that deepens the paradox (makes it even more contradictory). Answers that explain only one of the two facts without resolving the tension." },
+        ],
+        tip: "A useful frame: 'Even though [Fact 1], [Fact 2] because [Answer]. Does the answer fill in the blank sensibly? If yes, it's likely correct."
+      },
+    ]
+  },
+  "Reading Comprehension": {
+    icon: "📖",
+    color: "#7c3aed",
+    accent: "#ede9fe",
+    topics: [
+      {
+        title: "Passage Mapping Strategy",
+        tag: "Foundation",
+        tagColor: "#16a34a",
+        tagBg: "#dcfce7",
+        summary: "Don't try to memorise the passage. Instead, map its structure: what each paragraph does (purpose), the author's main point, and the overall tone. GMAT passages are dense — reading for structure is faster than reading for detail.",
+        points: [
+          { label: "Paragraph purpose", text: "After each paragraph, note in one phrase what it does: 'Introduces phenomenon', 'Gives counter-evidence', 'Author's position', 'Conclusion/implication'." },
+          { label: "Author's tone", text: "Is the author neutral, critical, cautious, enthusiastic, or sceptical? Tone questions are common and the answer is in the language used (e.g., 'surprisingly', 'unfortunately', 'it is clear that')." },
+          { label: "Primary purpose", text: "The main goal of the passage. Typically: to describe/explain a phenomenon, to argue a position, to evaluate two views, or to challenge a prevailing theory." },
+          { label: "Signal words", text: "However, although, despite = contrast/shift. Moreover, furthermore, in addition = continuation. Therefore, thus, consequently = conclusion. Specifically, for example = elaboration." },
+        ],
+        tip: "Spend 2–3 minutes reading strategically. On your map, note (1) what each paragraph does and (2) how it relates to the main argument. Then go to the questions."
+      },
+      {
+        title: "Main Idea / Primary Purpose",
+        tag: "High-Yield",
+        tagColor: "#d97706",
+        tagBg: "#fef3c7",
+        summary: "These questions ask for the passage's overall point or goal. The correct answer covers the entire passage — not just one paragraph. Too narrow = wrong; too broad = wrong.",
+        points: [
+          { label: "Too narrow", text: "An answer that only describes one paragraph or one piece of evidence. Eliminate these — they don't capture the full scope." },
+          { label: "Too broad", text: "An answer that goes beyond what the passage discusses. Eliminate if the passage doesn't cover that ground." },
+          { label: "Author's purpose", text: "Common framings: 'to argue that', 'to describe', 'to evaluate', 'to challenge', 'to compare'. Match the verb carefully — 'to argue' implies the author takes a side; 'to describe' implies neutrality." },
+          { label: "Elimination", text: "On most Primary Purpose questions, 2–3 answers are clearly off. Eliminate those first, then choose between the remaining using scope (too narrow vs. just right)." },
+        ],
+        tip: "Restate the main idea in your own words before looking at answer choices. Then look for the answer that best matches your restatement."
+      },
+      {
+        title: "Detail / Specific Information",
+        tag: "Common",
+        tagColor: "#2563eb",
+        tagBg: "#dbeafe",
+        summary: "These ask about specific facts stated in the passage. The correct answer paraphrases what the passage says — the exact wording will be different. Your job: locate and verify.",
+        points: [
+          { label: "Always go back", text: "Never rely on memory for detail questions. Use the question's specific language to locate the relevant paragraph, then read 2–3 sentences around the reference." },
+          { label: "Paraphrase matching", text: "Correct answers use different words than the passage. Don't be fooled by an answer that uses the passage's exact words but changes the meaning." },
+          { label: "Extreme language", text: "Eliminate answers with extreme words like 'only', 'always', 'never', 'all', 'completely' unless the passage explicitly uses that language." },
+          { label: "Common traps", text: "True in the real world but not stated in this passage. Stated in the passage but in a different context than what the question asks about." },
+        ],
+        tip: "Treat Detail questions like a scavenger hunt. The question gives you a keyword — find that keyword (or a synonym) in the passage, then read the surrounding context."
+      },
+      {
+        title: "Inference Questions",
+        tag: "Tricky",
+        tagColor: "#7c3aed",
+        tagBg: "#ede9fe",
+        summary: "Ask what can be concluded or implied from the passage. The correct answer is strongly supported but not explicitly stated. It should be a small logical step from the text, not a leap.",
+        points: [
+          { label: "Must be true standard", text: "Apply the same 'must be true' standard as CR inference questions. If the answer is only 'probably true', it's not strong enough." },
+          { label: "Supported by passage", text: "Every inference must be traceable to specific lines. If you cannot point to where the passage supports the answer, it is speculation." },
+          { label: "Tone-consistent", text: "Inferences must be consistent with the author's tone and position. If the author is sceptical of X, an answer that assumes the author endorses X is wrong." },
+          { label: "Common traps", text: "Answers that go one step too far. Answers that are plausible given real-world knowledge but not supported by this specific passage." },
+        ],
+        tip: "After identifying a likely answer, ask: 'Is the support for this explicitly in the passage, or am I bringing in outside knowledge?' GMAT inference questions are self-contained."
+      },
+      {
+        title: "Function / Boldface RC",
+        tag: "Advanced",
+        tagColor: "#0891b2",
+        tagBg: "#cffafe",
+        summary: "These questions ask WHY the author included a specific detail, example, or sentence — not what it says, but what role it plays in the passage's argument.",
+        points: [
+          { label: "Purpose first", text: "Before looking at choices, ask yourself: 'Why did the author include this sentence/example?' Is it evidence? Contrast? Concession? Illustration? Conclusion?" },
+          { label: "Relation to surroundings", text: "The function is determined by how the detail relates to surrounding sentences. What came before it? Does the detail support, contradict, or elaborate on it?" },
+          { label: "Structural signals", text: "Function answers often begin with 'to provide evidence for', 'to illustrate', 'to challenge', 'to qualify'. Match the direction (support vs. contrast)." },
+          { label: "Common wrong answers", text: "Answers that describe what the sentence says (not what it does). Answers that identify the function correctly but get the relationship direction wrong (e.g., 'to support' when it actually 'contrasts')." },
+        ],
+        tip: "Read the sentence before and after the cited portion. The function question is really asking about the logical relationship between the cited portion and the argument around it."
+      },
+      {
+        title: "Tone & Author Attitude",
+        tag: "Common",
+        tagColor: "#059669",
+        tagBg: "#d1fae5",
+        summary: "These ask how the author feels about the topic, a theory, or a group. Look for evaluative language — adjectives, adverbs, and specific word choices that reveal attitude.",
+        points: [
+          { label: "Evaluative language", text: "Words like 'misguided', 'overstated', 'surprisingly', 'compellingly', 'unfortunately' signal the author's stance. These are your primary clues." },
+          { label: "Neutral vs. opinionated", text: "Many passages are structured as: paragraph 1 = neutral description; paragraph 2 = author's critique or endorsement. The shift often happens with a signal word like 'however' or 'yet'." },
+          { label: "Degree of certainty", text: "Watch for qualifiers: 'suggests' vs. 'proves', 'may indicate' vs. 'demonstrates'. Tone answers must match the author's level of certainty." },
+          { label: "Common traps", text: "Answers that are too extreme ('hostile', 'dismissive') when the author is merely 'sceptical'. Answers that are too mild ('neutral') when the author clearly takes a position." },
+        ],
+        tip: "The author's main tone is usually set in the final paragraph or in the main argument structure. First-person evaluative language is the strongest signal of attitude."
+      },
+    ]
+  }
+};
+
+// ─── Verbal Notes View ────────────────────────────────────────────────────────
+function VerbalNotesView() {
+  const [activeSection, setActiveSection] = useState("Critical Reasoning");
+  const [expandedTopic, setExpandedTopic] = useState(null);
+
+  const section = VERBAL_NOTES[activeSection];
+
+  return (
+    <div className="fade-in" style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 36 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>📝</div>
+          <div>
+            <h1 style={{ fontSize: 36, fontWeight: 800, color: "#1a2340", lineHeight: 1.1 }}>Verbal <span style={{ color: "#7c3aed", fontStyle: "italic" }}>Study Notes</span></h1>
+            <p style={{ color: "#64748b", fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 2 }}>Topic-wise concept notes for GMAT Focus Verbal Reasoning</p>
+          </div>
+        </div>
+
+        {/* Section Tabs */}
+        <div style={{ display: "flex", gap: 10, marginTop: 24, flexWrap: "wrap" }}>
+          {Object.entries(VERBAL_NOTES).map(([name, data]) => (
+            <button
+              key={name}
+              onClick={() => { setActiveSection(name); setExpandedTopic(null); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                padding: "10px 22px", borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: "pointer", border: "2px solid",
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                background: activeSection === name ? data.color : "#fff",
+                color: activeSection === name ? "#fff" : data.color,
+                borderColor: data.color,
+                transition: "all 0.2s",
+                boxShadow: activeSection === name ? `0 4px 16px ${data.color}33` : "none"
+              }}
+            >
+              <span>{data.icon}</span> {name}
+              <span style={{
+                background: activeSection === name ? "rgba(255,255,255,0.25)" : data.accent,
+                color: activeSection === name ? "#fff" : data.color,
+                borderRadius: 20, padding: "1px 8px", fontSize: 11, fontWeight: 800
+              }}>{data.topics.length} topics</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Quick stats bar */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 28, flexWrap: "wrap" }}>
+        {[
+          { label: "Topics Covered", value: section.topics.length, icon: "📚" },
+          { label: "Question Types", value: section.topics.filter(t => t.tag !== "Foundation").length, icon: "🎯" },
+          { label: "Strategy Tips", value: section.topics.length, icon: "💡" },
+        ].map((stat, i) => (
+          <div key={i} className="card" style={{ padding: "12px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 20 }}>{stat.icon}</span>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: section.color }}>{stat.value}</div>
+              <div style={{ fontSize: 11, color: "#64748b", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>{stat.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Topic Cards */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {section.topics.map((topic, idx) => {
+          const isOpen = expandedTopic === idx;
+          return (
+            <div
+              key={idx}
+              className="card"
+              style={{
+                border: `1.5px solid ${isOpen ? section.color : "#e2e8f0"}`,
+                transition: "all 0.25s",
+                boxShadow: isOpen ? `0 4px 24px ${section.color}18` : undefined,
+                cursor: "pointer"
+              }}
+              onClick={() => setExpandedTopic(isOpen ? null : idx)}
+            >
+              {/* Topic Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 14, justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                    background: isOpen ? section.color : "#f1f5f9",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 16, fontWeight: 800, color: isOpen ? "#fff" : "#64748b",
+                    transition: "all 0.25s"
+                  }}>
+                    {idx + 1}
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1a2340" }}>{topic.title}</h3>
+                      <span style={{
+                        background: topic.tagBg, color: topic.tagColor,
+                        border: `1px solid ${topic.tagColor}44`,
+                        borderRadius: 20, padding: "2px 10px", fontSize: 10, fontWeight: 800, fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        letterSpacing: 0.5
+                      }}>{topic.tag}</span>
+                    </div>
+                    {!isOpen && <p style={{ color: "#64748b", fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", marginTop: 2, lineHeight: 1.4 }}>{topic.summary.slice(0, 90)}…</p>}
+                  </div>
+                </div>
+                <div style={{ color: section.color, fontSize: 18, fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>
+                  {isOpen ? "▲" : "▼"}
+                </div>
+              </div>
+
+              {/* Expanded Content */}
+              {isOpen && (
+                <div style={{ marginTop: 20, borderTop: `1px solid ${section.accent}`, paddingTop: 20 }}>
+                  {/* Summary */}
+                  <div style={{ background: section.accent, borderRadius: 10, padding: "14px 18px", marginBottom: 20, borderLeft: `3px solid ${section.color}` }}>
+                    <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 14, color: "#1a2340", lineHeight: 1.65 }}>{topic.summary}</p>
+                  </div>
+
+                  {/* Key Points */}
+                  <h4 style={{ fontSize: 12, fontWeight: 800, color: section.color, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>Key Concepts</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 20 }}>
+                    {topic.points.map((point, pi) => (
+                      <div key={pi} style={{ background: "#f8faff", borderRadius: 10, padding: "14px 16px", border: "1px solid #e2e8f0" }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, color: "#1a2340", marginBottom: 5, display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: "50%", background: section.color, display: "inline-block", flexShrink: 0 }} />
+                          {point.label}
+                        </div>
+                        <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, color: "#475569", lineHeight: 1.6 }}>{point.text}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pro Tip */}
+                  <div style={{ background: "linear-gradient(135deg, #fefce8, #fef9c3)", borderRadius: 10, padding: "14px 18px", border: "1px solid #fcd34d", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>💡</span>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 11, color: "#92400e", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Pro Tip</div>
+                      <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, color: "#78350f", lineHeight: 1.6 }}>{topic.tip}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer note */}
+      <div style={{ marginTop: 32, textAlign: "center", padding: "20px", background: "#f8faff", borderRadius: 12, border: "1px solid #e2e8f0" }}>
+        <p style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, color: "#64748b" }}>
+          💡 <strong>Study tip:</strong> Read one topic before attempting related questions in your mock tests. These notes align directly with the question types in your GMAT Focus Edition mocks.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(<GmatApp />);
 </script>
 </body>
